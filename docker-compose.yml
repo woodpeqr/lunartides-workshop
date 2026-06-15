@@ -1,0 +1,117 @@
+services:
+  flux:
+    build:
+      context: ./workers/flux
+      args:
+        TARGETARCH: ${TARGETARCH:-amd64}
+    networks: [lunartides]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  rift:
+    build:
+      context: ./workers/rift
+      args:
+        TARGETARCH: ${TARGETARCH:-amd64}
+    networks: [lunartides]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  swell:
+    build:
+      context: ./workers/swell
+      args:
+        TARGETARCH: ${TARGETARCH:-amd64}
+    networks: [lunartides]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  shoal:
+    build:
+      context: ./workers/shoal
+      args:
+        TARGETARCH: ${TARGETARCH:-amd64}
+    networks: [lunartides]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.114.0
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    networks: [lunartides]
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+
+  prometheus:
+    image: prom/prometheus:v3.0.0
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks: [lunartides]
+
+  loki:
+    image: grafana/loki:3.2.0
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./loki-config.yaml:/etc/loki/local-config.yaml
+    networks: [lunartides]
+
+  tempo:
+    image: grafana/tempo:2.6.0
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./tempo.yaml:/etc/tempo.yaml
+    networks: [lunartides]
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_SECURITY_ADMIN_PASSWORD=lunartides
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    networks: [lunartides]
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+
+  moontide:
+    build:
+      context: ./orchestrator
+    networks: [lunartides]
+    depends_on:
+      flux:
+        condition: service_healthy
+      rift:
+        condition: service_healthy
+      swell:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+
+networks:
+  lunartides:
+    driver: bridge
