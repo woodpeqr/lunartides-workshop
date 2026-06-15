@@ -2,8 +2,7 @@ services:
   flux:
     build:
       context: ./workers/flux
-      args:
-        TARGETARCH: ${TARGETARCH:-amd64}
+
     networks: [lunartides]
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
@@ -14,8 +13,7 @@ services:
   rift:
     build:
       context: ./workers/rift
-      args:
-        TARGETARCH: ${TARGETARCH:-amd64}
+
     networks: [lunartides]
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
@@ -26,8 +24,7 @@ services:
   swell:
     build:
       context: ./workers/swell
-      args:
-        TARGETARCH: ${TARGETARCH:-amd64}
+
     networks: [lunartides]
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
@@ -38,8 +35,7 @@ services:
   shoal:
     build:
       context: ./workers/shoal
-      args:
-        TARGETARCH: ${TARGETARCH:-amd64}
+
     networks: [lunartides]
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
