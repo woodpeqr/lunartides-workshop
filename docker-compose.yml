@@ -2,8 +2,7 @@ services:
   flux:
     build:
       context: ./workers/flux
-      args:
-        TARGETARCH: ${TARGETARCH:-amd64}
+
     networks: [lunartides]
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
@@ -14,8 +13,7 @@ services:
   rift:
     build:
       context: ./workers/rift
-      args:
-        TARGETARCH: ${TARGETARCH:-amd64}
+
     networks: [lunartides]
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
@@ -26,8 +24,7 @@ services:
   swell:
     build:
       context: ./workers/swell
-      args:
-        TARGETARCH: ${TARGETARCH:-amd64}
+
     networks: [lunartides]
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
@@ -38,8 +35,7 @@ services:
   shoal:
     build:
       context: ./workers/shoal
-      args:
-        TARGETARCH: ${TARGETARCH:-amd64}
+
     networks: [lunartides]
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
@@ -73,6 +69,7 @@ services:
     command: -config.file=/etc/loki/local-config.yaml
     volumes:
       - ./loki-config.yaml:/etc/loki/local-config.yaml
+      - loki-data:/var/loki
     networks: [lunartides]
 
   tempo:
@@ -80,12 +77,13 @@ services:
     command: ["-config.file=/etc/tempo.yaml"]
     volumes:
       - ./tempo.yaml:/etc/tempo.yaml
+      - tempo-data:/var/tempo
     networks: [lunartides]
 
   grafana:
     image: grafana/grafana:11.3.0
     ports:
-      - "3000:3000"
+      - "3001:3000"
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
@@ -111,6 +109,10 @@ services:
         condition: service_healthy
       otel-collector:
         condition: service_started
+
+volumes:
+  loki-data:
+  tempo-data:
 
 networks:
   lunartides:
