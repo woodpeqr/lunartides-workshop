@@ -1,2 +1,7 @@
-FROM alpine:3.21
-CMD ["/bin/sh", "-c", "echo 'LunarTides MoonTide orchestrator — check out a language branch (feature/go, feature/python, feature/csharp) to run the orchestrator.' && exit 0"]
+FROM python:3.12-slim
+WORKDIR /app
+COPY pyproject.toml ./
+RUN pip install --no-cache-dir -e .
+COPY moontide/ ./moontide/
+EXPOSE 8080
+CMD ["python", "-m", "moontide"]
