@@ -1,6 +1,6 @@
 module github.com/woodpeqr/lunartides-workshop
 
-go 1.25.0
+go 1.25
 
 require (
 	go.opentelemetry.io/contrib/bridges/otelzap v0.19.0
