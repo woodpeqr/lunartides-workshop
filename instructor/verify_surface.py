@@ -54,8 +54,10 @@ print("=== scenario mutations present in schema, returning bare types ===")
 r=gql('{__type(name:"MetaMutation"){fields{name type{name ofType{name}}}}}')
 fs={f["name"]:(f["type"].get("name") or (f["type"].get("ofType") or {}).get("name")) for f in data(r,"__type","fields") or []}
 chk("meta scenario1/2/3 + wipe", sorted(fs)==["scenario1","scenario2","scenario3","wipe"], str(fs))
-chk("scenario1→Entity", fs.get("scenario1")=="Entity", fs.get("scenario1"))
-chk("scenario2→list", fs.get("scenario2") in (None,"Entity"), "list of Entity")  # NonNull(list) → ofType name is null; accept
+# scenarios are all String! now (NonNull String → ofType name String)
+chk("scenario1→String", fs.get("scenario1")=="String", fs.get("scenario1"))
+chk("scenario2→String", fs.get("scenario2")=="String", fs.get("scenario2"))
+chk("scenario3→String", fs.get("scenario3")=="String", fs.get("scenario3"))
 
 np=sum(1 for _,c in res if c)
 print(f"\n=== {np}/{len(res)} PASS ===")

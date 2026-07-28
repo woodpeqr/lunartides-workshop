@@ -47,37 +47,44 @@ OOM-died mid-request) there is no `response` — the absence itself says "no rep
 came back", distinct from a 4xx/5xx where the service did answer.
 
 Each scenario is a BLOCKING mutation under `meta`. It drives entity-service into
-a failure mode, logs **every request it makes** (one line to stdout), runs until
-its stop condition, then returns the RAW result of the operation that stopped it
-— as the SAME type the matching oracle query returns. Two feedback channels, no
-dashboard required:
+a failure mode and runs **until entity-service fails** — so the expected outcome
+is always a GraphQL error (the induced failure). Every scenario field is typed
+`String!`, but that string is only the by-contract return on the essentially
+never-reached no-failure path (`"scenario N stopped"`); the bugs are never fixed,
+nothing "survives". Two feedback channels, no dashboard required:
 
-1. **The returned payload / error** — either the breaking operation's data, or a
-   GraphQL error with the symptom.
-2. **The live log stream** — `docker compose logs -f dgs-service` shows each
-   request scroll by, then the FAILED line.
+1. **The GraphQL error** — the symptom, with the verbatim exchange in
+   `extensions.exchange` (except the slow-list timeout, which is a dgs-side
+   judgement with no service error to attach).
+2. **The live log stream** — `docker compose logs -f dgs-service` (with `log:true`).
 
-Run one at a time from the GraphiQL playground (`localhost:8080`):
+Run one at a time from the GraphiQL playground (`localhost:8080`) — the fields
+are scalars, no sub-selection:
 
 ```graphql
-mutation { meta { scenario1 { id } } }            # like createEntity → Entity
-mutation { meta { scenario2 { id name type } } }  # like listEntities → [Entity!]!
-mutation { meta { scenario3 { id } } }            # like createEntity → Entity
+mutation { meta { scenario1 } }
+mutation { meta { scenario2 } }
+mutation { meta { scenario3 } }
 ```
 
 Add `log: true` to stream every request + response verbatim to the dgs-service
-container logs while the scenario runs (`docker compose logs -f dgs-service`):
+container logs while the scenario runs:
 ```graphql
-mutation { meta { scenario3(log: true) { id } } }
+mutation { meta { scenario3(log: true) } }
 ```
-Default is silent. The failing operation's exchange is always on the error's
+Default is silent. The failing operation's exchange is on the error's
 `extensions` regardless of `log`.
 
-| Mutation | Returns | Teaches | What happens | Stops when | Outcome |
-|----------|---------|---------|--------------|------------|---------|
-| `scenario1` | `Entity` | **metrics** | single writer POSTs ~256KB entities flat-out; whole-file re-marshal ramps the heap to the 256m limit | first create fails (OOM) | ~30s → `errors[]: "create: service unreachable"` |
-| `scenario2` | `[Entity!]!` | **traces** | grows the store, timing a list each batch; every list re-scans the whole file | a list exceeds 80ms (healthy ~1ms) | ~80s → the slow list as data; or `errors[]: "scenario timed out before entity-service failed"` if the bound is never crossed |
-| `scenario3` | `Entity` | **logs** | 8 concurrent writers tear the non-atomic store file | first operation returns a 5xx | ~1s → `errors[]: "create: internal error reported by service"` |
+| Mutation | Teaches | What happens | Ends with |
+|----------|---------|--------------|-----------|
+| `scenario1` | **metrics** | single writer POSTs ~256KB entities flat-out; whole-file re-marshal ramps the heap to the 256m limit | ~30s → `errors[]: "create: service unreachable"` (OOM) |
+| `scenario2` | **traces** | grows the store, timing a list each batch; every list re-scans the whole file, so latency climbs | ~30s → `errors[]: "GET /entities timed out — the request took longer than 50ms"` |
+| `scenario3` | **logs** | 8 concurrent writers tear the non-atomic store file | ~1s → `errors[]: "create: internal error reported by service"` (5xx) |
+
+Note on the slow-list bound: it is **50ms** (healthy is ~1ms), not higher,
+because entity-service re-marshals the whole store on every list — the transient
+allocation OOMs the 256m container at ~100–150ms of list latency, before a larger
+bound could be reached. The error names the bound, never the actual duration.
 
 The error message is the WHETHER symptom. WHERE/WHY lives in entity-service
 telemetry: scenario1 → the Go-memory metric ramp + `es-flood-oom` alert;
