@@ -1,56 +1,60 @@
-# Lunartides Observability Workshop
+# Observability Stack
 
-A hands-on workshop on OpenTelemetry.
+A pre-configured local observability stack built on OpenTelemetry, Prometheus, Loki, Tempo, and Grafana.
 
-You own **vcs**, a small source-control service. Its code is correct but has no
-safeguards, so under load it crashes or degrades — and telemetry is the only way
-to see when and why.
+## Stack Components
 
-**dgs** exercises vcs and reports a blunt PASS/FAIL verdict. When it complains,
-you open Grafana and use metrics, traces, and logs to find the cause. Your job is
-to instrument vcs and build the dashboards and alerts that reveal a failure
-before dgs ever complains.
+- **OTel Collector** — receives telemetry over gRPC (:4317) and HTTP (:4318), forwards to Prometheus, Loki, and Tempo
+- **Prometheus** — metrics storage and querying
+- **Loki** — log aggregation
+- **Tempo** — distributed tracing backend
+- **Grafana** — dashboards and data exploration; pre-provisioned with Prometheus, Loki, and Tempo data sources
+- **vcs** — student-owned REST source-control service (the workshop subject); telemetry pre-wired, business logic deliberately buggy. Built from `./vcs`.
+- **dgs** — instructor-built GraphQL master / blunt PASS/FAIL oracle over `vcs`; zero telemetry. Built from the sibling `../lunartides-workers` repo.
 
-Everything you need runs locally with one command.
+## Prerequisites
 
-## Run
+- Docker Desktop
+- Git
+- Go 1.26+ (only for running the services on the host; the stack builds them in-container)
+- The sibling `lunartides-workers` repo checked out next to this one (provides the `dgs` service; compose builds `../lunartides-workers`)
 
-```bash
-docker compose up
-```
+## Setup
 
-Then open:
+1. Clone the repository:
 
-| What | Where |
+   ```bash
+   git clone https://github.com/woodpeqr/lunartides-workshop.git
+   cd lunartides-workshop
+   ```
+
+2. Start the stack (builds `vcs` + `dgs` and starts the infra):
+
+   ```bash
+   docker compose up --build
+   ```
+
+## Endpoints
+
+| Service | Address |
 |---|---|
-| Grafana — build your dashboards and alerts here | http://localhost:3001 |
-| dgs — run the oracle, watch it PASS/FAIL | http://localhost:8080 |
-| vcs — the service you instrument | http://localhost:8081 |
+| Grafana | http://localhost:3001 |
+| dgs GraphiQL (master oracle) | http://localhost:8080 |
+| vcs REST (subject) | http://localhost:8081 |
+| OTel Collector gRPC | :4317 |
+| OTel Collector HTTP | :4318 |
+| Prometheus | http://localhost:9090 |
 
-Grafana starts empty and needs no login. Dashboards and alerts you build persist
-across restarts.
+Grafana anonymous access is enabled — no login required.
 
-Stop:
+## Stopping the Stack
 
 ```bash
-docker compose down       # keep your dashboards and alerts
-docker compose down -v    # also wipe them
+docker compose down
 ```
 
-## Environment variables
+To remove persisted volumes as well:
 
-**vcs**
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `VCS_ADDR` | `:8081` | Listen address |
-| `OTEL_SERVICE_NAME` | `vcs` | Service name in telemetry |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `otel-collector:4317` | Where telemetry is sent |
-| `OTEL_EXPORTER_OTLP_INSECURE` | `true` | Disable TLS to the collector |
-
-**dgs**
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `DGS_ADDR` | `:8080` | Listen address |
-| `VCS_BASE_URL` | `http://vcs:8081` | vcs service to exercise |
+```bash
+docker compose down -v
+```
