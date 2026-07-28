@@ -56,7 +56,8 @@ services:
       - tempo
 
   # vcs — student-owned REST source-control subject. Telemetry pre-wired to the
-  # collector; deliberately buggy business logic (CONTRACT §5).
+  # collector. Logic is correct but has no safeguards, so it crashes or degrades
+  # under load — telemetry is the only way to observe it.
   vcs:
     build: ./vcs
     # Hard memory ceiling makes OOM timing deterministic across host machines —
@@ -73,11 +74,9 @@ services:
     depends_on:
       - otel-collector
 
-  # dgs — instructor-built GraphQL master / blunt oracle. NO telemetry by design.
-  # Ships as a prebuilt PUBLIC image from GHCR; its source repo stays private, so
-  # students pull the black box and never see the oracle internals. Built and
-  # published by lunartides-workers/.github/workflows/publish.yml.
-  # Pin to a released tag (e.g. :v1.0.0) for a stable workshop.
+  # dgs — GraphQL oracle. NO telemetry by design. Ships as a prebuilt PUBLIC
+  # image from GHCR; source stays out of this repo, so it runs as a true black
+  # box. Pin to a released tag (e.g. :v1.0.0) for a stable workshop.
   dgs:
     image: ghcr.io/woodpeqr/dgs:latest
     pull_policy: always
