@@ -32,16 +32,19 @@ returns `data: null` for that field plus a top-level `errors[]` entry carrying a
 blunt symptom (the WHETHER signal, never WHERE/WHY). This applies to the whole
 surface — `getEntity`/`createEntity`/… and the scenarios.
 
-**Every error also carries the verbatim exchange in `extensions`** — exactly what
-went over the wire, so you can see the request that failed and what the service
-returned:
+**Every error also carries the verbatim exchange in `extensions.exchange`** —
+exactly what went over the wire, ordered most-telling-first (bodies last):
 ```json
 "extensions": {
-  "request":  { "method": "POST", "path": "/entities", "body": "<verbatim JSON>" },
-  "response": { "status": 500, "body": "{\"error\":\"unexpected end of JSON input\"}\n" }
+  "exchange": {
+    "response": { "status": 500, "body": "{\"error\":\"unexpected end of JSON input\"}\n" },
+    "request":  { "path": "/entities", "method": "POST", "body": "<verbatim JSON>" }
+  }
 }
 ```
-GET/DELETE requests have no `body`. On a transport failure there is no `response`.
+GET/DELETE requests have no `body`. On a transport failure (e.g. the service
+OOM-died mid-request) there is no `response` — the absence itself says "no reply
+came back", distinct from a 4xx/5xx where the service did answer.
 
 Each scenario is a BLOCKING mutation under `meta`. It drives entity-service into
 a failure mode, logs **every request it makes** (one line to stdout), runs until
