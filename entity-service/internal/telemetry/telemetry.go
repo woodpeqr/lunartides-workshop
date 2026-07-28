@@ -1,4 +1,4 @@
-// Package telemetry holds the OTel plumbing for vcs.
+// Package telemetry holds the OTel plumbing for entity-service.
 //
 // ============================================================================
 //  PLUMBING PRE-WIRED — SIGNAL IS THE STUDENT'S JOB.
@@ -12,9 +12,9 @@
 //  flow works from minute one.
 //
 //  What is YOUR job (the workshop): emit the signal from the hot paths.
-//    - Spans:   otel.Tracer("vcs").Start(ctx, "name") around store/handler work.
-//    - Metrics: otel.Meter("vcs").Int64Counter(...) etc., then .Add/.Record.
-//    - Logs:    global.Logger("vcs") (otel/log) with trace-context correlation.
+//    - Spans:   otel.Tracer("entity-service").Start(ctx, "name") around work.
+//    - Metrics: otel.Meter("entity-service").Int64Counter(...), then .Add/.Record.
+//    - Logs:    global.Logger("entity-service") (otel/log) with correlation.
 //
 //  The base build emits only minimal signal — just enough to prove flow works.
 //  Making the service observable IS the workshop. Search this repo for
@@ -40,9 +40,9 @@ import (
 )
 
 // Config is the telemetry-relevant slice of service configuration, sourced
-// from OTEL_* environment variables (see cmd/vcs config loading).
+// from OTEL_* environment variables (see cmd/entity-service config loading).
 type Config struct {
-	// ServiceName -> OTEL_SERVICE_NAME (default "vcs").
+	// ServiceName -> OTEL_SERVICE_NAME (default "entity-service").
 	ServiceName string
 	// Endpoint -> OTEL_EXPORTER_OTLP_ENDPOINT (default "localhost:4317").
 	Endpoint string
