@@ -29,34 +29,36 @@ python3 instructor/verify_surface.py
 
 Each scenario is a BLOCKING mutation under `meta`. It drives entity-service into
 a failure mode, logs **every request it makes** (one line to stdout), runs until
-its stop condition, then returns the stopping exchange. Two feedback channels, no
-dashboard required:
+its stop condition, then returns the RAW result of the operation that stopped it
+— rendered with the SAME result type as the matching oracle query (no bespoke
+wrapper). Two feedback channels, no dashboard required:
 
-1. **The returned payload** — the request that broke and the response it got.
+1. **The returned payload** — the actual `EntityResult`/`ListResult` of the
+   breaking operation (e.g. a `FAIL` createEntity, or a slow but `PASS` list).
 2. **The live log stream** — `docker compose logs -f dgs-service` shows each
    request scroll by, then the FAILED line.
 
-Run one at a time from the GraphiQL playground (`localhost:8080`):
+Run one at a time from the GraphiQL playground (`localhost:8080`). Query it with
+the SAME selection you'd use on the matching query/mutation:
 
 ```graphql
-mutation { meta { scenario1 {
-  scenario teaches stopped stopReason requestsSent
-  failingRequest failingResponse totalDurationMs
-} } }
+mutation { meta { scenario1 { verdict message entity { id } } } }   # like createEntity
+mutation { meta { scenario2 { verdict message count entities { id name } } } }  # like listEntities
+mutation { meta { scenario3 { verdict message entity { id } } } }   # like createEntity
 ```
 
-| Mutation | Teaches | What happens | Stops when | Typical result |
-|----------|---------|--------------|------------|----------------|
-| `scenario1` | **metrics** | single writer POSTs ~256KB entities flat-out; whole-file re-marshal per write ramps the Go heap to the 256m limit | first create fails (OOM) | ~30s, ~169 sent, `failingResponse: "service unreachable"` |
-| `scenario2` | **traces** | grows the store in batches, timing a list between each; every list re-scans the whole file | a list exceeds 80ms (healthy ~1ms) | ~80s, ~3400 sent, `failingResponse: "200 OK — but took 87ms to return 3450 entities"` |
-| `scenario3` | **logs** | 8 concurrent writers tear the non-atomic store file | first operation returns a 5xx | ~1s, `failingResponse: "500 internal error reported by service"` |
+| Mutation | Returns | Teaches | What happens | Stops when | Typical result |
+|----------|---------|---------|--------------|------------|----------------|
+| `scenario1` | `EntityResult` | **metrics** | single writer POSTs ~256KB entities flat-out; whole-file re-marshal ramps the heap to the 256m limit | first create fails (OOM) | ~30s → `FAIL "create: service unreachable"` |
+| `scenario2` | `ListResult` | **traces** | grows the store, timing a list each batch; every list re-scans the whole file | a list exceeds 80ms (healthy ~1ms) | ~80s → `PASS "listed 3250 entities"` (slow, not failed) |
+| `scenario3` | `EntityResult` | **logs** | 8 concurrent writers tear the non-atomic store file | first operation returns a 5xx | ~1s → `FAIL "create: internal error reported by service"` |
 
-The returned `failingResponse` is the WHETHER symptom. WHERE/WHY lives in
+The returned verdict/message is the WHETHER symptom. WHERE/WHY lives in
 entity-service telemetry: scenario1 → the Go-memory metric ramp + `es-flood-oom`
 alert; scenario2 → the list-latency trace/metric + `es-slow-list` alert;
 scenario3 → the Loki log `failed to parse entity store file` + `es-corruption`
-alert. Dashboard-free, the returned exchange + log stream already say "it broke,
-and here's the request that broke it".
+alert. Dashboard-free, the returned result + log stream already say "it broke,
+and here's the operation that broke".
 
 `listEntities` returns the full records (`entities { id name type status
 version }`), not just a count — handy for eyeballing what the store holds.
