@@ -20,6 +20,7 @@ import (
 	"syscall"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -93,6 +94,14 @@ func run() error {
 			log.Printf("vcs: telemetry shutdown: %v", err)
 		}
 	}()
+
+	// Go runtime metrics (heap, GC, goroutines) via the OTel runtime
+	// instrumentation, emitted through the meter provider telemetry.Init just
+	// installed. These are in-process — identical on every OS, no infra needed —
+	// and reveal the object-flood heap ramp and the scenario worker goroutines.
+	if err := runtime.Start(runtime.WithMinimumReadMemStatsInterval(time.Second)); err != nil {
+		return err
+	}
 
 	// Wire the store + handlers onto a stdlib mux (Go 1.22+ routing).
 	st := store.New()
@@ -231,12 +240,13 @@ func outcome(status int) string {
 	}
 }
 
-// baseSignal is the ONE middleware the base build ships (PLAN §3): it emits a
-// single request counter (DATAPOINT-01) and a single top-level span per request
-// (DATAPOINT-02), enriched with custom vcs.* domain attributes (operation,
-// resource kind/id, trusted/mutating flags, outcome, duration) rather than
-// generic http.*/url.* plumbing. It deliberately adds NO child spans and NO
-// store-level metrics — making the hot paths observable is the workshop.
+// baseSignal is the HTTP server middleware: it emits a top-level span per
+// request (DATAPOINT-02) and the full HTTP metric surface — request counter,
+// duration histogram, in-flight up-down counter, and an error counter — all
+// enriched with custom vcs.* domain attributes (operation, resource kind/id,
+// trusted/mutating flags, outcome, duration) rather than generic http.*/url.*
+// plumbing. Child spans and store metrics live in the handlers/store; this
+// layer owns the request-level view a Grafana RED dashboard reads.
 func baseSignal(next http.Handler) (http.Handler, error) {
 	tracer := otel.Tracer("vcs")
 	meter := otel.Meter("vcs")
@@ -244,6 +254,28 @@ func baseSignal(next http.Handler) (http.Handler, error) {
 	requests, err := meter.Int64Counter(
 		"vcs.requests.total",
 		metric.WithDescription("Total HTTP requests handled by vcs."),
+	)
+	if err != nil {
+		return nil, err
+	}
+	duration, err := meter.Float64Histogram(
+		"vcs.request.duration",
+		metric.WithDescription("HTTP request duration."),
+		metric.WithUnit("ms"),
+	)
+	if err != nil {
+		return nil, err
+	}
+	inflight, err := meter.Int64UpDownCounter(
+		"vcs.requests.in_flight",
+		metric.WithDescription("HTTP requests currently being served."),
+	)
+	if err != nil {
+		return nil, err
+	}
+	reqErrors, err := meter.Int64Counter(
+		"vcs.requests.errors",
+		metric.WithDescription("HTTP requests that ended in a 4xx/5xx response."),
 	)
 	if err != nil {
 		return nil, err
@@ -285,6 +317,15 @@ func baseSignal(next http.Handler) (http.Handler, error) {
 		)
 		defer span.End()
 
+		// In-flight gauge: incremented for the life of the request, so a stall
+		// or a flood of concurrent requests shows up as a rising level.
+		inflightAttrs := metric.WithAttributes(
+			attribute.String("vcs.operation", op.name),
+			attribute.String("vcs.resource.kind", op.kind),
+		)
+		inflight.Add(ctx, 1, inflightAttrs)
+		defer inflight.Add(ctx, -1, inflightAttrs)
+
 		start := time.Now()
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rec, r.WithContext(ctx))
@@ -301,11 +342,20 @@ func baseSignal(next http.Handler) (http.Handler, error) {
 			span.SetStatus(codes.Error, http.StatusText(rec.status))
 		}
 
-		requests.Add(ctx, 1, metric.WithAttributes(
+		// Metric attributes: operation + resource kind + outcome + status. Kept
+		// low-cardinality (no resource id) so the RED panels aggregate cleanly.
+		result := outcome(rec.status)
+		metricAttrs := metric.WithAttributes(
 			attribute.String("vcs.operation", op.name),
 			attribute.String("vcs.resource.kind", op.kind),
-			attribute.String("vcs.outcome", outcome(rec.status)),
-		))
+			attribute.String("vcs.outcome", result),
+			attribute.Int("vcs.response.status", rec.status),
+		)
+		requests.Add(ctx, 1, metricAttrs)
+		duration.Record(ctx, float64(time.Since(start).Microseconds())/1000.0, metricAttrs)
+		if rec.status >= 400 {
+			reqErrors.Add(ctx, 1, metricAttrs)
+		}
 	}), nil
 }
 

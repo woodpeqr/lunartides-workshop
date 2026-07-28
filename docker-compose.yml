@@ -66,6 +66,11 @@ services:
       - OTEL_SERVICE_NAME=vcs
       - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
       - OTEL_EXPORTER_OTLP_INSECURE=true
+      # Export metrics every 5s (SDK default is 60s). Standard OTel env var, no
+      # code change. The failure scenarios ramp over tens of seconds, so a 60s
+      # window would let the container OOM before a single export — students
+      # would see a flatline then a gap, never the ramp that predicts the crash.
+      - OTEL_METRIC_EXPORT_INTERVAL=5000
     networks: [lunartides]
     depends_on:
       - otel-collector

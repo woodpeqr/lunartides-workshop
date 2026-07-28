@@ -1,23 +1,28 @@
 package store
 
 import (
+	"context"
 	"errors"
 	"testing"
 )
+
+// ctx is the background context threaded into store calls; the store opens
+// child spans off it (no-op under the test's default global tracer).
+var ctx = context.Background()
 
 // Test corpus guardrail (PLAN §5): only ASCII, non-empty, single-commit, serial
 // inputs — this keeps the planted telemetry-only bugs dormant so CI stays green.
 
 func TestPutGetObjectRoundTrip(t *testing.T) {
 	s := New()
-	h, err := s.PutObject([]byte("hello"))
+	h, err := s.PutObject(ctx, []byte("hello"))
 	if err != nil {
 		t.Fatalf("PutObject: %v", err)
 	}
 	if h == "" {
 		t.Fatal("expected non-empty hash")
 	}
-	got, err := s.GetObject(h)
+	got, err := s.GetObject(ctx, h)
 	if err != nil {
 		t.Fatalf("GetObject: %v", err)
 	}
@@ -28,8 +33,8 @@ func TestPutGetObjectRoundTrip(t *testing.T) {
 
 func TestPutObjectDedup(t *testing.T) {
 	s := New()
-	h1, _ := s.PutObject([]byte("dup"))
-	h2, _ := s.PutObject([]byte("dup"))
+	h1, _ := s.PutObject(ctx, []byte("dup"))
+	h2, _ := s.PutObject(ctx, []byte("dup"))
 	if h1 != h2 {
 		t.Fatalf("identical content should dedup to same hash: %s != %s", h1, h2)
 	}
@@ -37,7 +42,7 @@ func TestPutObjectDedup(t *testing.T) {
 
 func TestGetObjectNotFound(t *testing.T) {
 	s := New()
-	if _, err := s.GetObject("deadbeef"); !errors.Is(err, ErrNotFound) {
+	if _, err := s.GetObject(ctx, "deadbeef"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("expected ErrNotFound, got %v", err)
 	}
 }
@@ -57,11 +62,11 @@ func TestCanonicalDeterministic(t *testing.T) {
 
 func TestPutCommitAndGet(t *testing.T) {
 	s := New()
-	id, err := s.PutCommit(map[string]string{"README": "hi"}, "", "init")
+	id, err := s.PutCommit(ctx, map[string]string{"README": "hi"}, "", "init")
 	if err != nil {
 		t.Fatalf("PutCommit: %v", err)
 	}
-	c, err := s.GetCommit(id)
+	c, err := s.GetCommit(ctx, id)
 	if err != nil {
 		t.Fatalf("GetCommit: %v", err)
 	}
@@ -76,8 +81,8 @@ func TestPutCommitAndGet(t *testing.T) {
 func TestPutCommitStableID(t *testing.T) {
 	s1 := New()
 	s2 := New()
-	id1, _ := s1.PutCommit(map[string]string{"a": "1", "b": "2"}, "", "m")
-	id2, _ := s2.PutCommit(map[string]string{"b": "2", "a": "1"}, "", "m")
+	id1, _ := s1.PutCommit(ctx, map[string]string{"a": "1", "b": "2"}, "", "m")
+	id2, _ := s2.PutCommit(ctx, map[string]string{"b": "2", "a": "1"}, "", "m")
 	if id1 != id2 {
 		t.Fatalf("same inputs should yield same commit id: %s != %s", id1, id2)
 	}
@@ -85,17 +90,17 @@ func TestPutCommitStableID(t *testing.T) {
 
 func TestRefRoundTrip(t *testing.T) {
 	s := New()
-	if err := s.SetRef("main", "abc123"); err != nil {
+	if err := s.SetRef(ctx, "main", "abc123"); err != nil {
 		t.Fatalf("SetRef: %v", err)
 	}
-	got, err := s.GetRef("main")
+	got, err := s.GetRef(ctx, "main")
 	if err != nil {
 		t.Fatalf("GetRef: %v", err)
 	}
 	if got != "abc123" {
 		t.Fatalf("ref mismatch: got %q", got)
 	}
-	if _, err := s.GetRef("nope"); !errors.Is(err, ErrNotFound) {
+	if _, err := s.GetRef(ctx, "nope"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("expected ErrNotFound for unknown ref, got %v", err)
 	}
 }
@@ -104,8 +109,8 @@ func TestCheckoutRoundTripASCII(t *testing.T) {
 	// ASCII, non-empty, single-commit, serial: bug-dormant round trip.
 	s := New()
 	files := map[string]string{"README": "hello", "src/main.go": "package main"}
-	id, _ := s.PutCommit(files, "", "init")
-	got, err := s.Checkout(id)
+	id, _ := s.PutCommit(ctx, files, "", "init")
+	got, err := s.Checkout(ctx, id)
 	if err != nil {
 		t.Fatalf("Checkout: %v", err)
 	}
@@ -121,9 +126,9 @@ func TestCheckoutRoundTripASCII(t *testing.T) {
 
 func TestCheckoutViaRef(t *testing.T) {
 	s := New()
-	id, _ := s.PutCommit(map[string]string{"f": "v"}, "", "m")
-	_ = s.SetRef("main", id)
-	got, err := s.Checkout("main")
+	id, _ := s.PutCommit(ctx, map[string]string{"f": "v"}, "", "m")
+	_ = s.SetRef(ctx, "main", id)
+	got, err := s.Checkout(ctx, "main")
 	if err != nil {
 		t.Fatalf("Checkout via ref: %v", err)
 	}
@@ -134,31 +139,31 @@ func TestCheckoutViaRef(t *testing.T) {
 
 func TestCheckoutUnknown(t *testing.T) {
 	s := New()
-	if _, err := s.Checkout("nonexistent"); !errors.Is(err, ErrNotFound) {
+	if _, err := s.Checkout(ctx, "nonexistent"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("expected ErrNotFound, got %v", err)
 	}
 }
 
 func TestWipeResetsState(t *testing.T) {
 	s := New()
-	h, _ := s.PutObject([]byte("data"))
-	id, _ := s.PutCommit(map[string]string{"f": "v"}, "", "m")
-	_ = s.SetRef("main", id)
+	h, _ := s.PutObject(ctx, []byte("data"))
+	id, _ := s.PutCommit(ctx, map[string]string{"f": "v"}, "", "m")
+	_ = s.SetRef(ctx, "main", id)
 
-	s.Wipe()
+	s.Wipe(ctx)
 
-	if _, err := s.GetObject(h); !errors.Is(err, ErrNotFound) {
+	if _, err := s.GetObject(ctx, h); !errors.Is(err, ErrNotFound) {
 		t.Fatal("wipe should clear objects")
 	}
-	if _, err := s.GetCommit(id); !errors.Is(err, ErrNotFound) {
+	if _, err := s.GetCommit(ctx, id); !errors.Is(err, ErrNotFound) {
 		t.Fatal("wipe should clear commits")
 	}
-	if _, err := s.GetRef("main"); !errors.Is(err, ErrNotFound) {
+	if _, err := s.GetRef(ctx, "main"); !errors.Is(err, ErrNotFound) {
 		t.Fatal("wipe should clear refs")
 	}
 
 	// Fresh writes work after wipe.
-	if _, err := s.PutObject([]byte("again")); err != nil {
+	if _, err := s.PutObject(ctx, []byte("again")); err != nil {
 		t.Fatalf("PutObject after wipe: %v", err)
 	}
 }
