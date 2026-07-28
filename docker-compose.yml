@@ -46,22 +46,16 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=lunartides
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning
-      # Persist dashboards and alert rules built during the workshop across
-      # container restarts.
-      - grafana_data:/var/lib/grafana
+      # Dashboards and alerts built during the workshop persist here on disk.
+      - ./grafana/data:/var/lib/grafana
     networks: [lunartides]
     depends_on:
       - prometheus
       - loki
       - tempo
 
-  # vcs — student-owned REST source-control subject. Telemetry pre-wired to the
-  # collector. Logic is correct but has no safeguards, so it crashes or degrades
-  # under load — telemetry is the only way to observe it.
   vcs:
     build: ./vcs
-    # Hard memory ceiling makes OOM timing deterministic across host machines —
-    # Scenario 1 (object flood) reliably kills the container at this bound.
     mem_limit: 256m
     ports:
       - "8081:8081"
@@ -74,9 +68,6 @@ services:
     depends_on:
       - otel-collector
 
-  # dgs — GraphQL oracle. NO telemetry by design. Ships as a prebuilt PUBLIC
-  # image from GHCR; source stays out of this repo, so it runs as a true black
-  # box. Pin to a released tag (e.g. :v1.0.0) for a stable workshop.
   dgs:
     image: ghcr.io/woodpeqr/dgs:latest
     pull_policy: always
@@ -92,7 +83,6 @@ services:
 volumes:
   loki-data:
   tempo-data:
-  grafana_data:
 
 networks:
   lunartides:

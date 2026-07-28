@@ -1,0 +1,2 @@
+# Grafana persistent state (dashboards, alerts, sqlite db) built at runtime.
+/grafana/data/
