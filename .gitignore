@@ -1,2 +1,2 @@
-# Grafana persistent state (dashboards, alerts, sqlite db) built at runtime.
-/grafana/data/
+# Runtime telemetry state (grafana dashboards/alerts, prometheus/loki/tempo data).
+/telemetry/
