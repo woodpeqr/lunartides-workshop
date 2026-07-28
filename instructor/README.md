@@ -36,6 +36,31 @@ Toggle via dgs-service GraphiQL (`localhost:8080`):
 | 2 | slowList | **traces** | seeds ~3000 entities, then readers hammer `GET /entities`; each list re-scans the whole multi-MB file → p95 climbs | `es-slow-list` (list p95 > 30ms; healthy ~1ms) |
 | 3 | corruption | **logs** | 8 concurrent writers tear the non-atomic store file; reads then fail to parse → 5xx + error log | `es-corruption` (5xx rate > 0.2/s) + Loki log `failed to parse entity store file` |
 
+## Watching requests fail in the playground
+
+Two ways to see individual request outcomes flip PASS→FAIL as a scenario degrades
+entity-service, both from the GraphiQL playground at `localhost:8080`:
+
+1. **Re-run a probe on a loop.** With a scenario active, put this in the editor
+   and press Cmd/Ctrl+Enter repeatedly (GraphiQL has no built-in auto-repeat, so
+   it's manual re-run, or hold the shortcut):
+   ```graphql
+   mutation { probeRoundTrip(name:"x", type:"switch", status:"active") { verdict message entity { id version } } }
+   ```
+   Healthy → `PASS "round-trip verified"`. Under load → `FAIL` with a symptom.
+
+2. **One-shot burst.** `probeBurst` fires N probes server-side and returns each
+   attempt, so a SINGLE run shows the PASS/FAIL mix:
+   ```graphql
+   mutation { probeBurst(count: 20) { passed failed attempts { verdict message entity { id } } } }
+   ```
+   During the corruption scenario this returns e.g. `passed:0 failed:20`, each
+   attempt carrying `"create step failed (internal error reported by service)"`.
+
+`listEntities` now returns the full records (`entities { id name type status
+version }`), not just a count — handy for eyeballing what the service actually
+holds between scenario runs.
+
 Notes:
 - Scenario 1 uses a single writer on purpose: concurrent writers would tear the
   file (scenario 3's failure) and stall the heap ramp before OOM.
