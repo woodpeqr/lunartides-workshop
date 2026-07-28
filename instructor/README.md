@@ -32,6 +32,17 @@ returns `data: null` for that field plus a top-level `errors[]` entry carrying a
 blunt symptom (the WHETHER signal, never WHERE/WHY). This applies to the whole
 surface — `getEntity`/`createEntity`/… and the scenarios.
 
+**Every error also carries the verbatim exchange in `extensions`** — exactly what
+went over the wire, so you can see the request that failed and what the service
+returned:
+```json
+"extensions": {
+  "request":  { "method": "POST", "path": "/entities", "body": "<verbatim JSON>" },
+  "response": { "status": 500, "body": "{\"error\":\"unexpected end of JSON input\"}\n" }
+}
+```
+GET/DELETE requests have no `body`. On a transport failure there is no `response`.
+
 Each scenario is a BLOCKING mutation under `meta`. It drives entity-service into
 a failure mode, logs **every request it makes** (one line to stdout), runs until
 its stop condition, then returns the RAW result of the operation that stopped it
@@ -50,6 +61,14 @@ mutation { meta { scenario1 { id } } }            # like createEntity → Entity
 mutation { meta { scenario2 { id name type } } }  # like listEntities → [Entity!]!
 mutation { meta { scenario3 { id } } }            # like createEntity → Entity
 ```
+
+Add `log: true` to stream every request + response verbatim to the dgs-service
+container logs while the scenario runs (`docker compose logs -f dgs-service`):
+```graphql
+mutation { meta { scenario3(log: true) { id } } }
+```
+Default is silent. The failing operation's exchange is always on the error's
+`extensions` regardless of `log`.
 
 | Mutation | Returns | Teaches | What happens | Stops when | Outcome |
 |----------|---------|---------|--------------|------------|---------|
