@@ -1,9 +1,6 @@
 apiVersion: 1
 
-providers:
-  - name: workshop-dashboards
-    type: file
-    updateIntervalSeconds: 10
-    options:
-      path: /var/lib/grafana/dashboards
-      foldersFromFilesStructure: true
+# No dashboards are provisioned. Students start with an empty Grafana and build
+# their own panels and alert rules (REDESIGN_PLAN §5.1). Datasources remain
+# provisioned so students don't fight datasource wiring.
+providers: []

@@ -1,0 +1,17 @@
+Start: 10:00
+Length: 3h
+Title: Observing the garbage that is our code - What is Obvservability and how to achieve it
+Agenda:
+- Seminar (~30 minutes):
+    - What is observability, how to achieve it, and cool things like Spans, Logs and Metrics
+
+- Workshop (~90 minutes, flexible):
+    - Take over established observability stack
+    - Implement a service and provide instrumentation
+
+Requirements: 
+Internet access
+git
+Docker Desktop
+go 1.26+
+go IDE (VS Code is recommended)

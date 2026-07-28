@@ -7,6 +7,3 @@ scrape_configs:
     static_configs:
       - targets: ['otel-collector:8889']
 
-  - job_name: swell-runtime
-    static_configs:
-      - targets: ['swell:9090']

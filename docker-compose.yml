@@ -1,48 +1,4 @@
 services:
-  flux:
-    build:
-      context: ./workers/flux
-
-    networks: [lunartides]
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-
-  rift:
-    build:
-      context: ./workers/rift
-
-    networks: [lunartides]
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-
-  swell:
-    build:
-      context: ./workers/swell
-
-    networks: [lunartides]
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-
-  shoal:
-    build:
-      context: ./workers/shoal
-
-    networks: [lunartides]
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.114.0
     volumes:
@@ -90,29 +46,54 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=lunartides
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning
+      # Persist dashboards and alert rules built during the workshop across
+      # container restarts.
+      - grafana_data:/var/lib/grafana
     networks: [lunartides]
     depends_on:
       - prometheus
       - loki
       - tempo
 
-  moontide:
-    build:
-      context: ./orchestrator
+  # vcs — student-owned REST source-control subject. Telemetry pre-wired to the
+  # collector; deliberately buggy business logic (CONTRACT §5).
+  vcs:
+    build: ./vcs
+    # Hard memory ceiling makes OOM timing deterministic across host machines —
+    # Scenario 1 (object flood) reliably kills the container at this bound.
+    mem_limit: 256m
+    ports:
+      - "8081:8081"
+    environment:
+      - VCS_ADDR=:8081
+      - OTEL_SERVICE_NAME=vcs
+      - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
+      - OTEL_EXPORTER_OTLP_INSECURE=true
     networks: [lunartides]
     depends_on:
-      flux:
-        condition: service_healthy
-      rift:
-        condition: service_healthy
-      swell:
-        condition: service_healthy
-      otel-collector:
-        condition: service_started
+      - otel-collector
+
+  # dgs — instructor-built GraphQL master / blunt oracle. NO telemetry by design.
+  # Ships as a prebuilt PUBLIC image from GHCR; its source repo stays private, so
+  # students pull the black box and never see the oracle internals. Built and
+  # published by lunartides-workers/.github/workflows/publish.yml.
+  # Pin to a released tag (e.g. :v1.0.0) for a stable workshop.
+  dgs:
+    image: ghcr.io/woodpeqr/dgs:latest
+    pull_policy: always
+    ports:
+      - "8080:8080"
+    environment:
+      - DGS_ADDR=:8080
+      - VCS_BASE_URL=http://vcs:8081
+    networks: [lunartides]
+    depends_on:
+      - vcs
 
 volumes:
   loki-data:
   tempo-data:
+  grafana_data:
 
 networks:
   lunartides:
