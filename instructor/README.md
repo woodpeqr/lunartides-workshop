@@ -25,50 +25,51 @@ python3 instructor/build_alerts.py
 python3 instructor/verify_surface.py
 ```
 
-## Scenarios → lesson → signal → alert
+## Scenarios — blocking runs with a built-in feedback loop
 
-Toggle via dgs-service GraphiQL (`localhost:8080`):
-`mutation { meta { scenario(id: N) { active message } } }` (toggle same id off).
+Each scenario is a BLOCKING mutation under `meta`. It drives entity-service into
+a failure mode, logs **every request it makes** (one line to stdout), runs until
+its stop condition, then returns the stopping exchange. Two feedback channels, no
+dashboard required:
 
-| id | Name | Teaches | What happens | Fires |
-|----|------|---------|--------------|-------|
-| 1 | createFlood | **metrics** | one writer creates fat entities; the whole store file is re-marshalled per write, Go heap ramps to the 256m limit → OOM | `es-flood-oom` (Go memory > 130MB) |
-| 2 | slowList | **traces** | seeds ~3000 entities, then readers hammer `GET /entities`; each list re-scans the whole multi-MB file → p95 climbs | `es-slow-list` (list p95 > 30ms; healthy ~1ms) |
-| 3 | corruption | **logs** | 8 concurrent writers tear the non-atomic store file; reads then fail to parse → 5xx + error log | `es-corruption` (5xx rate > 0.2/s) + Loki log `failed to parse entity store file` |
+1. **The returned payload** — the request that broke and the response it got.
+2. **The live log stream** — `docker compose logs -f dgs-service` shows each
+   request scroll by, then the FAILED line.
 
-## Watching requests fail in the playground
+Run one at a time from the GraphiQL playground (`localhost:8080`):
 
-Two ways to see individual request outcomes flip PASS→FAIL as a scenario degrades
-entity-service, both from the GraphiQL playground at `localhost:8080`:
+```graphql
+mutation { meta { scenario1 {
+  scenario teaches stopped stopReason requestsSent
+  failingRequest failingResponse totalDurationMs
+} } }
+```
 
-1. **Re-run a probe on a loop.** With a scenario active, put this in the editor
-   and press Cmd/Ctrl+Enter repeatedly (GraphiQL has no built-in auto-repeat, so
-   it's manual re-run, or hold the shortcut):
-   ```graphql
-   mutation { probeRoundTrip(name:"x", type:"switch", status:"active") { verdict message entity { id version } } }
-   ```
-   Healthy → `PASS "round-trip verified"`. Under load → `FAIL` with a symptom.
+| Mutation | Teaches | What happens | Stops when | Typical result |
+|----------|---------|--------------|------------|----------------|
+| `scenario1` | **metrics** | single writer POSTs ~256KB entities flat-out; whole-file re-marshal per write ramps the Go heap to the 256m limit | first create fails (OOM) | ~30s, ~169 sent, `failingResponse: "service unreachable"` |
+| `scenario2` | **traces** | grows the store in batches, timing a list between each; every list re-scans the whole file | a list exceeds 80ms (healthy ~1ms) | ~80s, ~3400 sent, `failingResponse: "200 OK — but took 87ms to return 3450 entities"` |
+| `scenario3` | **logs** | 8 concurrent writers tear the non-atomic store file | first operation returns a 5xx | ~1s, `failingResponse: "500 internal error reported by service"` |
 
-2. **One-shot burst.** `probeBurst` fires N probes server-side and returns each
-   attempt, so a SINGLE run shows the PASS/FAIL mix:
-   ```graphql
-   mutation { probeBurst(count: 20) { passed failed attempts { verdict message entity { id } } } }
-   ```
-   During the corruption scenario this returns e.g. `passed:0 failed:20`, each
-   attempt carrying `"create step failed (internal error reported by service)"`.
+The returned `failingResponse` is the WHETHER symptom. WHERE/WHY lives in
+entity-service telemetry: scenario1 → the Go-memory metric ramp + `es-flood-oom`
+alert; scenario2 → the list-latency trace/metric + `es-slow-list` alert;
+scenario3 → the Loki log `failed to parse entity store file` + `es-corruption`
+alert. Dashboard-free, the returned exchange + log stream already say "it broke,
+and here's the request that broke it".
 
-`listEntities` now returns the full records (`entities { id name type status
-version }`), not just a count — handy for eyeballing what the service actually
-holds between scenario runs.
+`listEntities` returns the full records (`entities { id name type status
+version }`), not just a count — handy for eyeballing what the store holds.
 
 Notes:
-- Scenario 1 uses a single writer on purpose: concurrent writers would tear the
-  file (scenario 3's failure) and stall the heap ramp before OOM.
-- Scenario 2 uses few readers (2) so concurrent whole-file unmarshals stay under
-  the OOM ceiling — it must show latency, not crash.
-- entity-service has `restart: unless-stopped` so the flood OOM is repeatable.
-  After an OOM the store file may be large/torn; `mutation { meta { wipe } }`
-  resets it. Between scenario runs, wipe (or recreate the container) for a clean
+- One scenario at a time; a second call while one runs returns a busy result.
+- Scenario runs block on the HTTP request — if your client times out, the run's
+  context is cancelled and it stops. Scenario1/3 finish fast; scenario2 takes
+  ~80s (seeding is O(n²): each create re-marshals the whole growing file), so use
+  a generous client timeout.
+- entity-service has `restart: unless-stopped`, so after scenario1's OOM it comes
+  back. `mutation { meta { wipe } }` resets the store between runs for a clean
   baseline.
-- Metric export interval is 5s (`OTEL_METRIC_EXPORT_INTERVAL`), alert eval 10s,
-  so ramps are visible and alerts fire within the scenario's lifetime.
+- The continuous dashboard demo (metrics ramp, alerts firing) still works: a
+  scenario runs long enough (scenario1 ~30s, scenario2 ~80s) to move the panels
+  and trip its alert. Metric export is 5s, alert eval 10s.
