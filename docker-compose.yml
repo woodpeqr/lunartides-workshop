@@ -48,7 +48,8 @@ services:
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning
       # Dashboards and alerts built during the workshop persist here on disk.
-      - ./telemetry/grafana:/var/lib/grafana
+      # Grafana state is authored config, not ingested telemetry — kept separate.
+      - ./grafana/data:/var/lib/grafana
     networks: [lunartides]
     depends_on:
       - prometheus

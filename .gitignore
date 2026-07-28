@@ -1,2 +1,5 @@
-# Runtime telemetry state (grafana dashboards/alerts, prometheus/loki/tempo data).
+# Ingested telemetry state (prometheus metrics, loki logs, tempo traces).
 /telemetry/
+
+# Grafana runtime state — dashboards and alerts authored during the workshop.
+/grafana/data/
