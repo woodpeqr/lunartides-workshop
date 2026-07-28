@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Exercise every dgs-service query+mutation (incl meta) against the running stack."""
+"""Exercise every dgs-service query+mutation (incl meta) against the running
+stack. Success returns bare data; failure returns a top-level GraphQL error."""
 import json, urllib.request
 DGS="http://localhost:8080/graphql"
 def gql(q,v=None):
@@ -7,55 +8,54 @@ def gql(q,v=None):
     if v: b["variables"]=v
     req=urllib.request.Request(DGS,data=json.dumps(b).encode(),headers={"Content-Type":"application/json"})
     return json.load(urllib.request.urlopen(req))
+def data(r,*path):
+    d=r.get("data") or {}
+    for p in path: d=(d or {}).get(p)
+    return d
+def errs(r): return r.get("errors") or []
 res=[]
 def chk(n,c,d=""):
     res.append((n,c)); print(f"  {'PASS' if c else 'FAIL'}  {n}  {d}")
 
-print("=== meta.wipe (clean) ===")
-r=gql("mutation{meta{wipe{verdict message}}}")
-chk("meta.wipe", r.get("data",{}).get("meta",{}).get("wipe",{}).get("verdict")=="PASS", str(r.get("data") or r))
+print("=== meta.wipe ===")
+r=gql("mutation{meta{wipe}}")
+chk("meta.wipe", data(r,"meta","wipe")==True and not errs(r), str(r.get("data") or r))
 
-print("=== createEntity (create+readback oracle) ===")
-r=gql('mutation{createEntity(name:"rack1-sw3",type:"switch",status:"active"){verdict message entity{id name type status version}}}')
-ce=r.get("data",{}).get("createEntity",{})
-eid=(ce.get("entity") or {}).get("id")
-chk("createEntity", ce.get("verdict")=="PASS" and bool(eid), f"id={eid} v={ (ce.get('entity') or {}).get('version')}")
+print("=== createEntity (create+readback oracle) → bare Entity ===")
+r=gql('mutation{createEntity(name:"rack1-sw3",type:"switch",status:"active"){id name type status version}}')
+ce=data(r,"createEntity") or {}
+eid=ce.get("id")
+chk("createEntity", not errs(r) and bool(eid) and ce.get("version")==1, f"id={eid}")
 
 print("=== getEntity ===")
-r=gql('query($id:ID!){getEntity(id:$id){verdict message entity{id name status version}}}',{"id":eid})
-ge=r.get("data",{}).get("getEntity",{})
-chk("getEntity", ge.get("verdict")=="PASS" and (ge.get("entity") or {}).get("id")==eid, str(ge.get("entity")))
+r=gql('query($id:ID!){getEntity(id:$id){id name status version}}',{"id":eid})
+chk("getEntity", not errs(r) and (data(r,"getEntity") or {}).get("id")==eid, str(data(r,"getEntity")))
 
 print("=== updateEntity (version++ oracle) ===")
-r=gql('mutation($id:ID!){updateEntity(id:$id,name:"rack1-sw3",type:"switch",status:"maintenance"){verdict message entity{version status}}}',{"id":eid})
-ue=r.get("data",{}).get("updateEntity",{})
-chk("updateEntity", ue.get("verdict")=="PASS" and (ue.get("entity") or {}).get("version")==2, f"v={(ue.get('entity') or {}).get('version')} status={(ue.get('entity') or {}).get('status')}")
+r=gql('mutation($id:ID!){updateEntity(id:$id,name:"rack1-sw3",type:"switch",status:"maintenance"){version status}}',{"id":eid})
+ue=data(r,"updateEntity") or {}
+chk("updateEntity", not errs(r) and ue.get("version")==2 and ue.get("status")=="maintenance", str(ue))
 
-print("=== listEntities ===")
-r=gql('query{listEntities{verdict message count}}')
-le=r.get("data",{}).get("listEntities",{})
-chk("listEntities", le.get("verdict")=="PASS" and le.get("count")==1, f"count={le.get('count')}")
+print("=== listEntities → bare [Entity] ===")
+r=gql('query{listEntities{id name type status version}}')
+le=data(r,"listEntities") or []
+chk("listEntities", not errs(r) and len(le)==1 and le[0].get("id")==eid, f"len={len(le)}")
 
-print("=== listEntities returns full entities ===")
-r=gql('query{listEntities{verdict count entities{id name type status version}}}')
-le=r.get("data",{}).get("listEntities",{})
-ents=le.get("entities") or []
-chk("listEntities entities[]", le.get("verdict")=="PASS" and len(ents)==le.get("count") and (ents[0].get("id") if ents else False), f"count={le.get('count')} entities={len(ents)}")
+print("=== deleteEntity (delete+404 oracle) → Boolean ===")
+r=gql('mutation($id:ID!){deleteEntity(id:$id)}',{"id":eid})
+chk("deleteEntity", not errs(r) and data(r,"deleteEntity")==True, str(data(r,"deleteEntity")))
 
-print("=== deleteEntity (delete+404 oracle) ===")
-r=gql('mutation($id:ID!){deleteEntity(id:$id){verdict message}}',{"id":eid})
-de=r.get("data",{}).get("deleteEntity",{})
-chk("deleteEntity", de.get("verdict")=="PASS", str(de.get("message")))
+print("=== getEntity missing → top-level error ===")
+r=gql('query{getEntity(id:"ent_nope"){id}}')
+msg=(errs(r)[0].get("message") if errs(r) else "")
+chk("getEntity(missing) errors[]", data(r,"getEntity") is None and "not found" in msg.lower(), msg)
 
-print("=== getEntity missing (oracle FAIL expected) ===")
-r=gql('query{getEntity(id:"ent_nope"){verdict message}}')
-gm=r.get("data",{}).get("getEntity",{})
-chk("getEntity(missing)=FAIL", gm.get("verdict")=="FAIL" and "not found" in gm.get("message","").lower(), str(gm.get("message")))
-
-print("=== scenario mutations present in schema ===")
-r=gql('{__type(name:"MetaMutation"){fields{name}}}')
-mf=sorted(f["name"] for f in r.get("data",{}).get("__type",{}).get("fields",[]))
-chk("meta scenario1/2/3 + wipe", mf==["scenario1","scenario2","scenario3","wipe"], str(mf))
+print("=== scenario mutations present in schema, returning bare types ===")
+r=gql('{__type(name:"MetaMutation"){fields{name type{name ofType{name}}}}}')
+fs={f["name"]:(f["type"].get("name") or (f["type"].get("ofType") or {}).get("name")) for f in data(r,"__type","fields") or []}
+chk("meta scenario1/2/3 + wipe", sorted(fs)==["scenario1","scenario2","scenario3","wipe"], str(fs))
+chk("scenario1→Entity", fs.get("scenario1")=="Entity", fs.get("scenario1"))
+chk("scenario2→list", fs.get("scenario2") in (None,"Entity"), "list of Entity")  # NonNull(list) → ofType name is null; accept
 
 np=sum(1 for _,c in res if c)
 print(f"\n=== {np}/{len(res)} PASS ===")
