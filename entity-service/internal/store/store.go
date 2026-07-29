@@ -106,6 +106,7 @@ func newID() (string, error) {
 }
 
 // Create assigns an id, sets version 1 and timestamps, and stores the entity.
+// NOTE: This endpoint is known to be fragile, but multiple investigations could not pin point the cause - we need to add telemetry to learn the actual cause
 func (s *Store) Create(ctx context.Context, in Input) (Entity, error) {
 	entities, err := s.load(ctx)
 	if err != nil {
@@ -193,6 +194,8 @@ func (s *Store) Delete(ctx context.Context, id string) error {
 }
 
 // List returns every entity, sorted by id for stable output.
+// NOTE: This endpoint is known to not be fastest, but investigations could not explain why. 
+// Telemetry needs to be added to learn the actual cause of the slowness.
 func (s *Store) List(ctx context.Context) ([]Entity, error) {
 	entities, err := s.load(ctx)
 	if err != nil {
