@@ -56,16 +56,12 @@ services:
       - loki
       - tempo
 
-  # entity-service — student-owned REST service (CRUD over entities, e.g. network
-  # devices). Functionally correct but has NO safeguards: a JSON file is its only
-  # store, read/written whole on every request with no cache, no lock, no caps.
-  # Under load it degrades, corrupts its store file, or OOMs — telemetry is the
-  # only way to observe it. Telemetry pre-wired to the collector.
+  # entity-service — the student-owned REST service (CRUD over entities, e.g.
+  # network devices). Telemetry is pre-wired to the collector.
   entity-service:
     build: ./entity-service
     mem_limit: 256m
-    # Recover after an OOM kill so the flood scenario is repeatable: the container
-    # dies, restarts, and the ramp can be watched again (a sawtooth in Grafana).
+    # Restart if the process exits so the service comes back on its own.
     restart: unless-stopped
     ports:
       - "8081:8081"
@@ -75,19 +71,15 @@ services:
       - OTEL_SERVICE_NAME=entity-service
       - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
       - OTEL_EXPORTER_OTLP_INSECURE=true
-      # Export metrics every 5s (SDK default is 60s). Standard OTel env var, no
-      # code change. The failure scenarios ramp over tens of seconds, so a 60s
-      # window would let the container OOM before a single export — students
-      # would see a flatline then a gap, never the ramp that predicts the crash.
+      # Export metrics every 5s (the SDK default is 60s) for quicker feedback.
       - OTEL_METRIC_EXPORT_INTERVAL=5000
     networks: [lunartides]
     depends_on:
       - otel-collector
 
-  # dgs-service — GraphQL oracle over entity-service. Blunt PASS/FAIL verdicts,
-  # ZERO telemetry by design. Also hosts the failure scenarios (meta namespace).
-  # Prebuilt PUBLIC image from GHCR; source stays out of this repo — a true black
-  # box. Pin to a released tag (e.g. :v1.0.0) for a stable workshop.
+  # dgs-service — GraphQL service that exercises entity-service and drives the
+  # workshop scenarios. Prebuilt image from GHCR; source is not in this repo.
+  # Pin to a released tag (e.g. :v1.0.0) for a stable workshop.
   dgs-service:
     image: ghcr.io/woodpeqr/dgs-service:latest
     pull_policy: always

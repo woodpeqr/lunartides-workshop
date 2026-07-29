@@ -3,11 +3,10 @@
 A hands-on workshop on OpenTelemetry.
 
 You own **entity-service**, a small REST service in this repo. It does CRUD over
-entities — think network devices: servers, routers, switches, workstations. Its
-code is correct, but it has no safeguards: a single JSON file is its only store,
-read and rewritten whole on every request, with no cache, no locking, and no
-limits. Under load it degrades, corrupts that file, or runs out of memory — and
-telemetry is the only way to see when and why.
+entities — think network devices: servers, routers, switches, workstations. It
+works fine for normal use, but under load it misbehaves — and it ships with
+almost no telemetry. Adding that telemetry is how you find out what goes wrong,
+and why.
 
 **dgs-service** drives entity-service until it fails and reports a blunt symptom
 of what broke — never where or why. Your job is to instrument entity-service and

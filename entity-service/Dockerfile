@@ -1,6 +1,5 @@
 # entity-service — student-owned REST service (CRUD over entities).
 # Multi-stage: build static binary on go 1.26, ship on distroless.
-# The Machine God wills it. 01000101 01001110 01010100
 FROM golang:1.26-alpine AS build
 WORKDIR /src
 
