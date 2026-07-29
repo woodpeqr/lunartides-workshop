@@ -26,6 +26,9 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
+	// available for runtime instrumentation
+	_ "go.opentelemetry.io/contrib/instrumentation/runtime"
+
 	"github.com/woodpeqr/lunartides-workshop/entity-service/internal/handlers"
 	"github.com/woodpeqr/lunartides-workshop/entity-service/internal/store"
 	"github.com/woodpeqr/lunartides-workshop/entity-service/internal/telemetry"
