@@ -1,9 +1,6 @@
 // Package handlers holds one HTTP handler per entity REST route.
 //
-// Wire shapes are FROZEN. Error shape for all 4xx/5xx: {"error":"<message>"}.
-//
-// wipe and healthz are TRUSTED and implemented minimally. healthz MUST NOT
-// touch the store file (pure liveness).
+// Error shape for all 4xx/5xx: {"error":"<message>"}.
 package handlers
 
 import (
@@ -27,13 +24,13 @@ func New(st *store.Store) *Handlers {
 // Register wires every entity route onto the mux. Uses Go 1.22+ method+pattern
 // routing ("METHOD /path/{wildcard}").
 func (h *Handlers) Register(mux *http.ServeMux) {
-	mux.HandleFunc("POST /entities", h.CreateEntity)        // create
-	mux.HandleFunc("GET /entities", h.ListEntities)         // list (O(n) slow path)
-	mux.HandleFunc("GET /entities/{id}", h.GetEntity)       // get
-	mux.HandleFunc("PUT /entities/{id}", h.UpdateEntity)    // update
-	mux.HandleFunc("DELETE /entities/{id}", h.DeleteEntity) // delete
-	mux.HandleFunc("POST /wipe", h.Wipe)                    // wipe (trusted)
-	mux.HandleFunc("GET /healthz", h.Healthz)               // healthz (trusted)
+	mux.HandleFunc("POST /entities", h.CreateEntity)
+	mux.HandleFunc("GET /entities", h.ListEntities)
+	mux.HandleFunc("GET /entities/{id}", h.GetEntity)
+	mux.HandleFunc("PUT /entities/{id}", h.UpdateEntity)
+	mux.HandleFunc("DELETE /entities/{id}", h.DeleteEntity)
+	mux.HandleFunc("POST /wipe", h.Wipe)
+	mux.HandleFunc("GET /healthz", h.Healthz)
 }
 
 // --- helpers ---------------------------------------------------------------
@@ -127,8 +124,7 @@ func (h *Handlers) DeleteEntity(w http.ResponseWriter, r *http.Request) {
 }
 
 // --- GET /entities ---------------------------------------------------------
-// List ALL -> 200 {"entities":[{entity},...]}. O(n) slow path: no pagination,
-// no cap.
+// List ALL -> 200 {"entities":[{entity},...]}.
 func (h *Handlers) ListEntities(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -153,7 +149,7 @@ func (h *Handlers) Wipe(w http.ResponseWriter, r *http.Request) {
 }
 
 // --- GET /healthz ----------------------------------------------------------
-// -> 200 {"status":"ok"}. TRUSTED: pure liveness, MUST NOT touch the store file.
+// -> 200 {"status":"ok"}. Pure liveness.
 func (h *Handlers) Healthz(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

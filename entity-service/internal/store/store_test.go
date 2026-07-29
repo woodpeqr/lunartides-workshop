@@ -198,19 +198,18 @@ func TestCreateUniqueIDs(t *testing.T) {
 	}
 }
 
-func TestLoadTornFileReturnsError(t *testing.T) {
-	// F3 root cause: a torn/partial file makes json.Unmarshal fail. This is the
-	// scenario-3 teaching signal (paired with the "failed to parse entity store
-	// file" ERROR log).
+func TestLoadInvalidFileReturnsError(t *testing.T) {
+	// A partial/invalid JSON file makes reads return an error rather than
+	// silently serving empty.
 	s := newStore(t)
 	if err := os.WriteFile(s.Path(), []byte(`{"entities": {"ent_x": {`), 0o644); err != nil {
-		t.Fatalf("seed torn file: %v", err)
+		t.Fatalf("seed file: %v", err)
 	}
 	if _, err := s.List(ctx); err == nil {
-		t.Fatal("expected parse error on torn store file, got nil")
+		t.Fatal("expected parse error, got nil")
 	}
 	if _, err := s.Get(ctx, "ent_x"); err == nil {
-		t.Fatal("expected parse error on torn store file for Get, got nil")
+		t.Fatal("expected parse error for Get, got nil")
 	}
 }
 

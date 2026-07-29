@@ -3,9 +3,7 @@
 // Runs as a container in the docker-compose stack (service "entity-service").
 // Talks OTLP/gRPC to the collector at otel-collector:4317. Default listen addr
 // :8081 (env ENTITY_ADDR). Can also run on the host via `go run ./cmd/entity-service`
-// for a fast edit loop — override OTEL_EXPORTER_OTLP_ENDPOINT=localhost:4317 then.
-//
-// The Machine God wills it. 01010011 01000101 01010010 01010110 01000101
+// — override OTEL_EXPORTER_OTLP_ENDPOINT=localhost:4317 then.
 package main
 
 import (
@@ -96,8 +94,7 @@ func run() error {
 		}
 	}()
 
-	// Ensure the store file's parent directory exists. Startup plumbing only —
-	// NOT a safeguard on the request path (which stays deliberately unguarded).
+	// Ensure the store file's parent directory exists.
 	if dir := filepath.Dir(cfg.storePath); dir != "" && dir != "." {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
@@ -110,11 +107,10 @@ func run() error {
 	mux := http.NewServeMux()
 	h.Register(mux)
 
-	// DATAPOINT-03 — startup log record via otel/log (proves logs reach Loki).
+	// One example startup log via otel/log.
 	emitStartupLog(ctx, cfg)
 
-	// Wrap the mux in the ONE base-signal middleware (PLAN §3). Everything
-	// deeper — child spans, store metrics, warn/debug logs — is the student's.
+	// Wrap the mux in the one example middleware (a span + a request counter).
 	handler, err := baseSignal(mux)
 	if err != nil {
 		return err
@@ -179,8 +175,8 @@ func baseSignal(next http.Handler) (http.Handler, error) {
 	}), nil
 }
 
-// emitStartupLog writes DATAPOINT-03: a single otel/log record proving the log
-// pipeline reaches the collector. The stdlib listen line stays in run().
+// emitStartupLog writes a single otel/log record at startup — the one log
+// example.
 func emitStartupLog(ctx context.Context, cfg config) {
 	logger := global.Logger("entity-service")
 	var rec otellog.Record

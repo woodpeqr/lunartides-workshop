@@ -11,9 +11,7 @@ import (
 	"github.com/woodpeqr/lunartides-workshop/entity-service/internal/store"
 )
 
-// These tests assert wire-shape stability and the trusted utilities. They use
-// only normal, single-threaded, serial inputs so the deliberate fragility
-// (concurrent tears, unbounded flood) stays dormant.
+// These tests assert the routes and response shapes under normal, serial use.
 
 func newServer(t *testing.T) *httptest.Server {
 	t.Helper()
