@@ -65,6 +65,10 @@ services:
     restart: unless-stopped
     ports:
       - "8081:8081"
+    volumes:
+      # Persist the store file on the host so it survives restarts/recreates.
+      # Kept outside ./entity-service so it never bloats the docker build context.
+      - ./entity-service-data:/data
     environment:
       - ENTITY_ADDR=:8081
       - ENTITY_STORE_PATH=/data/entities.json

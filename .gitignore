@@ -4,5 +4,8 @@
 # Grafana runtime state — dashboards and alerts authored during the workshop.
 /grafana/data/
 
+# entity-service on-disk store (runtime data).
+/entity-service-data/
+
 # Local-only compose overrides (e.g. use locally built images).
 /docker-compose.override.yml
