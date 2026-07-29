@@ -9,10 +9,10 @@ read and rewritten whole on every request, with no cache, no locking, and no
 limits. Under load it degrades, corrupts that file, or runs out of memory — and
 telemetry is the only way to see when and why.
 
-**dgs-service** exercises entity-service and reports a blunt PASS/FAIL verdict.
-When it complains, you open Grafana and use metrics, traces, and logs to find
-the cause. Your job is to instrument entity-service and build the dashboards and
-alerts that reveal a failure before dgs-service ever complains.
+**dgs-service** drives entity-service until it fails and reports a blunt symptom
+of what broke — never where or why. Your job is to instrument entity-service and
+build the Grafana dashboards and alerts that reveal each failure and explain its
+cause.
 
 dgs-service is a genuine black box: its source is **not in this repo**. The stack
 pulls it as a prebuilt image, so you cannot read the oracle to shortcut the
@@ -31,13 +31,38 @@ Then open:
 | What | Where |
 |---|---|
 | Grafana — build your dashboards and alerts here | http://localhost:3001 |
-| dgs-service — run the oracle, watch it PASS/FAIL | http://localhost:8080 |
+| dgs-service — run a scenario (GraphiQL playground) | http://localhost:8080 |
 | entity-service — the service you instrument | http://localhost:8081 |
 
 Grafana starts empty and needs no login. Dashboards and alerts you build persist
 across restarts.
 
-Stop:
+## Running a scenario
+
+dgs-service drives entity-service into a failure mode on demand. Open its
+GraphiQL playground at http://localhost:8080 and run one of the three scenarios:
+
+```graphql
+mutation { meta { scenario1 } }
+mutation { meta { scenario2 } }
+mutation { meta { scenario3 } }
+```
+
+Each blocks until entity-service fails, then returns an error describing the
+symptom. Add `log: true` (e.g. `scenario1(log: true)`) to stream every request
+and response to the dgs-service container logs
+(`docker compose logs -f dgs-service`).
+
+For each scenario your goal is to:
+
+- **define an alert** in Grafana that fires on that failure, and
+- **understand what is going wrong and why** — the symptom tells you *that*
+  something broke; the telemetry you add to entity-service is how you find the
+  cause.
+
+Reset entity-service between scenarios with `mutation { meta { wipe } }`.
+
+## Stop
 
 ```bash
 docker compose down       # keep your dashboards and alerts

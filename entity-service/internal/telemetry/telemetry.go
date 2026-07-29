@@ -8,8 +8,8 @@
 //
 //  This package wires the provider chain (tracer / meter / logger) to the
 //  OTLP collector over gRPC and installs them as the OTel globals. That
-//  plumbing is TRUSTED and CORRECT (CONTRACT §5) — you do NOT edit it. Signal
-//  flow works from minute one.
+//  plumbing is TRUSTED and CORRECT — you do NOT edit it. Signal flow works from
+//  minute one.
 //
 //  What is YOUR job (the workshop): emit the signal from the hot paths.
 //    - Spans:   otel.Tracer("entity-service").Start(ctx, "name") around work.
@@ -17,8 +17,7 @@
 //    - Logs:    global.Logger("entity-service") (otel/log) with correlation.
 //
 //  The base build emits only minimal signal — just enough to prove flow works.
-//  Making the service observable IS the workshop. Search this repo for
-//  "TODO(workshop)" to find where signal belongs.
+//  Making the service observable IS the workshop.
 // ============================================================================
 package telemetry
 
@@ -62,7 +61,7 @@ type Providers struct {
 // a W3C trace-context + baggage propagator. Returns a Providers whose Shutdown
 // flushes and stops them.
 //
-// TRUSTED plumbing (CONTRACT §5) — pre-wired for the student, not part of the
+// TRUSTED plumbing — pre-wired for the student, not part of the
 // workshop exercise. Do not edit. The student's job is to EMIT signal from the
 // handlers/store using the globals this installs.
 func Init(ctx context.Context, cfg Config) (*Providers, error) {

@@ -1,4 +1,4 @@
-// Command entity-service is the student-owned REST entity service (CONTRACT §1).
+// Command entity-service is the student-owned REST entity service.
 //
 // Runs as a container in the docker-compose stack (service "entity-service").
 // Talks OTLP/gRPC to the collector at otel-collector:4317. Default listen addr
